@@ -18,6 +18,7 @@
     "lib/",
     "docs/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -25,7 +26,8 @@
     "test:unit": "node --test test/middleware.test.js test/headers.test.js test/client_factory.test.js test/latency.test.js test/latency_tracker.test.js test/fail_modes.test.js",
     "test:integration": "node --test test/integration.test.js test/wire_integration.test.js",
     "test:package": "node test/package_consumer.js",
-    "test:types": "tsc --project test/tsconfig.json"
+    "test:types": "tsc --project test/tsconfig.json",
+    "prepublishOnly": "npm test && npm run test:package"
   },
   "keywords": [
     "rate-limit",
@@ -54,6 +56,9 @@
       "optional": true
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/express": "4.17.23",
     "express": "^4.21.2",
@@ -61,7 +66,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ratelimitly-com/rl-express"
+    "url": "git+https://github.com/ratelimitly-com/rl-express.git"
   },
   "bugs": {
     "url": "https://github.com/ratelimitly-com/rl-express/issues"

@@ -10,10 +10,18 @@ const projectRoot = path.resolve(__dirname, '..');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-express-package-'));
 const consumerRoot = path.join(tempRoot, 'consumer');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const childEnv = { ...process.env };
+
+// `npm publish --dry-run` exports its configuration to lifecycle scripts. The
+// consumer test must perform a real nested pack and install even when its
+// parent publication is only a dry run.
+delete childEnv.npm_config_dry_run;
+delete childEnv.NPM_CONFIG_DRY_RUN;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
+    env: childEnv,
     ...options
   });
 
