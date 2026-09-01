@@ -1,0 +1,216 @@
+name: release
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'RELEASING.md'
+      - 'docs/**'
+      - 'index.d.ts'
+      - 'index.js'
+      - 'lib/**'
+      - 'package-lock.json'
+      - 'package.json'
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate npm release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      integrity: ${{ steps.pack.outputs.integrity }}
+      package_name: ${{ steps.pack.outputs.package_name }}
+      package_version: ${{ steps.pack.outputs.package_version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install trusted-publishing-capable npm
+        run: npm install --global npm@11.19.1
+
+      - name: Validate release metadata
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const packageMetadata = require('./package.json');
+          const lockMetadata = require('./package-lock.json');
+          const expectedRepository = 'git+https://github.com/ratelimitly-com/rl-express.git';
+          const problems = [];
+
+          if (!/^\d+\.\d+\.\d+$/.test(packageMetadata.version)) {
+            problems.push(`version must be numeric MAJOR.MINOR.PATCH, got ${packageMetadata.version}`);
+          }
+          if (lockMetadata.packages?.['']?.version !== packageMetadata.version) {
+            problems.push('package-lock root version does not match package.json');
+          }
+          if (packageMetadata.name !== 'ratelimitly-express') {
+            problems.push(`unexpected package name ${packageMetadata.name}`);
+          }
+          if (packageMetadata.repository?.url !== expectedRepository) {
+            problems.push(`repository.url must be exactly ${expectedRepository}`);
+          }
+          if (packageMetadata.private === true) {
+            problems.push('private packages cannot be released');
+          }
+          if (packageMetadata.publishConfig?.access !== 'public') {
+            problems.push('publishConfig.access must be public');
+          }
+          if (!packageMetadata.files?.includes('CHANGELOG.md')) {
+            problems.push('the npm package must include CHANGELOG.md');
+          }
+          if (process.env.RELEASE_REF.startsWith('refs/tags/')) {
+            const expectedTag = `v${packageMetadata.version}`;
+            if (process.env.RELEASE_TAG !== expectedTag) {
+              problems.push(`tag ${process.env.RELEASE_TAG} does not match ${expectedTag}`);
+            }
+          }
+
+          for (const problem of problems) {
+            console.error(`release contract: ${problem}`);
+          }
+          if (problems.length > 0) {
+            process.exit(1);
+          }
+          NODE
+          if [[ "$RELEASE_REF" == refs/tags/* ]]; then
+            git tag --points-at HEAD | grep -Fx -- "$RELEASE_TAG"
+          fi
+          npm --version
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Run complete test suite
+        run: npm test
+
+      - name: Test packed consumer
+        run: npm run test:package
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Pack release artifact
+        id: pack
+        run: |
+          package_dir="$RUNNER_TEMP/release-npm"
+          mkdir -p "$package_dir"
+          npm pack --json --pack-destination "$package_dir" > "$RUNNER_TEMP/pack.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const packageMetadata = require('./package.json');
+          const [packMetadata] = JSON.parse(
+            fs.readFileSync(`${process.env.RUNNER_TEMP}/pack.json`, 'utf8')
+          );
+          const tarball = path.join(process.env.RUNNER_TEMP, 'release-npm', packMetadata.filename);
+
+          if (!fs.existsSync(tarball)) {
+            throw new Error(`packed artifact does not exist: ${tarball}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `integrity=${packMetadata.integrity}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `package_name=${packageMetadata.name}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `package_version=${packageMetadata.version}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tarball=${packMetadata.filename}\n`);
+          NODE
+
+      - name: Upload exact npm artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-npm
+          path: ${{ runner.temp }}/release-npm/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: publish npm package
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.repository == 'ratelimitly-com/rl-express'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      HAS_BOOTSTRAP_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install trusted-publishing-capable npm
+        run: npm install --global npm@11.19.1
+
+      - name: Download exact npm artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: release-npm
+          path: ${{ runner.temp }}/release-npm
+
+      - name: Configure one-time bootstrap token
+        if: env.HAS_BOOTSTRAP_TOKEN == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN" --location=user
+
+      - name: Publish or verify existing release
+        env:
+          LOCAL_INTEGRITY: ${{ needs.validate.outputs.integrity }}
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_TARBALL: ${{ runner.temp }}/release-npm/${{ needs.validate.outputs.tarball }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+        run: |
+          package_spec="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+
+          if npm view "$package_spec" dist.integrity --json > "$RUNNER_TEMP/remote-integrity.json" 2>/dev/null; then
+            node <<'NODE'
+            const fs = require('node:fs');
+            const remoteIntegrity = JSON.parse(
+              fs.readFileSync(`${process.env.RUNNER_TEMP}/remote-integrity.json`, 'utf8')
+            );
+            if (remoteIntegrity !== process.env.LOCAL_INTEGRITY) {
+              throw new Error(
+                `published integrity ${remoteIntegrity} does not match local artifact ${process.env.LOCAL_INTEGRITY}`
+              );
+            }
+            NODE
+            echo "$package_spec is already published with the expected integrity."
+            exit 0
+          fi
+
+          npm publish "$PACKAGE_TARBALL" --access public --provenance

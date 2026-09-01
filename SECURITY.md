@@ -40,15 +40,11 @@ useful than a production capture.
 
 ## Supported versions
 
-The package has not yet made its first public npm release. Until then, security
-fixes target current `main`; private pre-public tags are not supported release
-lines.
-
-After the first public release, security fixes target the latest published
-release and current `main` unless release notes explicitly extend support to an
-older line. Users of older releases should expect to upgrade. The supported
-Node.js and Express versions are declared in `package.json`, CI, and the release
-notes.
+Security fixes target the latest published release, when one exists, and
+current `main` unless release notes explicitly extend support to an older line.
+Users of older releases should expect to upgrade. Private pre-public tags are
+not supported release lines. The supported Node.js and Express versions are
+declared in `package.json`, CI, and the release notes.
 
 ## Response and coordinated disclosure
 

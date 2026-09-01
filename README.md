@@ -205,7 +205,8 @@ code; the responder is a test fixture, not an alternative RateLimitly server.
 Contributions are welcome; see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
 development and review gates. Report suspected vulnerabilities privately by
 following [`SECURITY.md`](SECURITY.md). Release-visible changes are recorded in
-[`CHANGELOG.md`](CHANGELOG.md).
+[`CHANGELOG.md`](CHANGELOG.md). Maintainers should follow the verified
+[`RELEASING.md`](RELEASING.md) procedure.
 
 ## License
 

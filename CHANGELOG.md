@@ -3,10 +3,9 @@
 All notable changes to `ratelimitly-express` will be documented in this file.
 The project follows [Semantic Versioning](https://semver.org/).
 
-The first public npm release has not yet been published. The changes below will
-be assigned to version 1.0.0 when that release is cut.
-
 ## [Unreleased]
+
+## [1.0.0] - 2026-08-31
 
 ### Added
 
@@ -32,4 +31,5 @@ be assigned to version 1.0.0 when that release is cut.
   reports; implicit route-derived tracker identities are rejected.
 - Keep approximate conventional HTTP rate-limit headers disabled by default.
 
-[Unreleased]: https://github.com/ratelimitly-com/rl-express/commits/main
+[Unreleased]: https://github.com/ratelimitly-com/rl-express/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ratelimitly-com/rl-express/releases/tag/v1.0.0
