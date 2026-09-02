@@ -31,14 +31,20 @@ application may use resource requests, latency reports, or both.
 
 `ratelimitly-express` maps these operations to Express middleware:
 
-```mermaid
-flowchart LR
-    Request[HTTP request] --> Admission[RateLimitly resource request]
-    Admission -->|granted| Handler[Express route handler]
-    Admission -->|rejected| Rejection[429 response]
-    Admission -->|failure| Policy[failOpen policy]
-    Handler --> Response[HTTP response]
-    Response -. optional measured duration .-> Report[RateLimitly latency report]
+<!-- npm does not render mermaid, so this stays a plain-text diagram. -->
+
+```text
+HTTP request
+    |
+    v
+Ratelimitly resource request
+    |-- granted --> Express route handler --> HTTP response
+    |                                            .
+    |                                            .  optional measured duration
+    |                                            v
+    |                                        Ratelimitly latency report
+    |-- rejected --> 429 response
+    '-- failure ---> failOpen policy
 ```
 
 ## Install
