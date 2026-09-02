@@ -20,9 +20,14 @@ on:
     tags:
       - 'v[0-9]*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable version tag to publish after a recoverable workflow failure
+        required: false
+        type: string
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.workflow }}-${{ inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -45,6 +50,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -57,8 +63,8 @@ jobs:
 
       - name: Validate release metadata
         env:
-          RELEASE_REF: ${{ github.ref }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REF: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           node <<'NODE'
           const packageMetadata = require('./package.json');
@@ -154,9 +160,9 @@ jobs:
   publish:
     name: publish npm package
     if: >-
-      github.event_name == 'push' &&
-      startsWith(github.ref, 'refs/tags/v') &&
-      github.repository == 'ratelimitly-com/rl-express'
+      github.repository == 'ratelimitly-com/rl-express' &&
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != ''))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -188,29 +194,41 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN" --location=user
 
-      - name: Publish or verify existing release
+      - name: Check for an existing registry release
+        id: registry
         env:
-          LOCAL_INTEGRITY: ${{ needs.validate.outputs.integrity }}
           PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
-          PACKAGE_TARBALL: ${{ runner.temp }}/release-npm/${{ needs.validate.outputs.tarball }}
           PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
         run: |
           package_spec="${PACKAGE_NAME}@${PACKAGE_VERSION}"
 
           if npm view "$package_spec" dist.integrity --json > "$RUNNER_TEMP/remote-integrity.json" 2>/dev/null; then
-            node <<'NODE'
-            const fs = require('node:fs');
-            const remoteIntegrity = JSON.parse(
-              fs.readFileSync(`${process.env.RUNNER_TEMP}/remote-integrity.json`, 'utf8')
-            );
-            if (remoteIntegrity !== process.env.LOCAL_INTEGRITY) {
-              throw new Error(
-                `published integrity ${remoteIntegrity} does not match local artifact ${process.env.LOCAL_INTEGRITY}`
-              );
-            }
-            NODE
-            echo "$package_spec is already published with the expected integrity."
-            exit 0
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-          npm publish "$PACKAGE_TARBALL" --access public --provenance
+      - name: Verify an existing registry release
+        if: steps.registry.outputs.exists == 'true'
+        env:
+          LOCAL_INTEGRITY: ${{ needs.validate.outputs.integrity }}
+        run: >-
+          node -e "const fs = require('node:fs');
+          const remote = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/remote-integrity.json', 'utf8'));
+          if (remote !== process.env.LOCAL_INTEGRITY)
+          throw new Error('published integrity ' + remote + ' does not match local artifact ' + process.env.LOCAL_INTEGRITY);"
+
+      - name: Publish new registry release
+        if: steps.registry.outputs.exists != 'true'
+        env:
+          PACKAGE_TARBALL: ${{ runner.temp }}/release-npm/${{ needs.validate.outputs.tarball }}
+        run: npm publish "$PACKAGE_TARBALL" --access public --provenance
+
+      - name: Verify final registry integrity
+        env:
+          LOCAL_INTEGRITY: ${{ needs.validate.outputs.integrity }}
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+        run: |
+          npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" dist.integrity --json > "$RUNNER_TEMP/final-integrity.json"
+          node -e "const fs = require('node:fs'); const remote = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/final-integrity.json', 'utf8')); if (remote !== process.env.LOCAL_INTEGRITY) throw new Error('registry integrity ' + remote + ' does not match release artifact ' + process.env.LOCAL_INTEGRITY);"

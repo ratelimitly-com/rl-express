@@ -33,6 +33,21 @@ fails before publishing when they differ. If the version is already present on
 npm, the workflow succeeds only when the registry integrity exactly matches the
 artifact packed from the tag.
 
+If a tag workflow fails before npm accepts the package because of a recoverable
+workflow defect, keep the tag immutable. Fix and review the workflow on `main`,
+then dispatch it against the existing tag:
+
+```sh
+gh workflow run release.yml \
+  --repo ratelimitly-com/rl-express \
+  --ref main \
+  -f release_tag=v1.0.0
+```
+
+The recovery input checks out the named tag and applies the same tag/version,
+tag-target, test, audit, packaging, and integrity checks before publication. An
+empty manual dispatch validates `main` without publishing.
+
 After the workflow succeeds, verify the registry package from a clean temporary
 consumer and create the GitHub release from the existing tag.
 
