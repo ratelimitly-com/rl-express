@@ -230,5 +230,20 @@ jobs:
           PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
           PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
         run: |
-          npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" dist.integrity --json > "$RUNNER_TEMP/final-integrity.json"
+          package_spec="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+
+          for attempt in 1 2 3 4 5; do
+            if npm view "$package_spec" dist.integrity --json > "$RUNNER_TEMP/final-integrity.json" 2>/dev/null; then
+              break
+            fi
+
+            if [[ "$attempt" == 5 ]]; then
+              echo "::error::$package_spec was not visible after five registry checks"
+              exit 1
+            fi
+
+            echo "$package_spec is not visible yet; retrying registry check ($attempt/5)"
+            sleep 2
+          done
+
           node -e "const fs = require('node:fs'); const remote = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/final-integrity.json', 'utf8')); if (remote !== process.env.LOCAL_INTEGRITY) throw new Error('registry integrity ' + remote + ' does not match release artifact ' + process.env.LOCAL_INTEGRITY);"
