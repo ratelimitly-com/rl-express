@@ -66,6 +66,53 @@ jobs:
         working-directory: rl-express
         run: npm test
 
+  express-compatibility:
+    name: express ${{ matrix.express-version }} compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - express-version: '4.22.2'
+            types-version: '4.17.23'
+          - express-version: '5.2.1'
+            types-version: '5.0.6'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Select Express compatibility target
+        run: >-
+          npm install --no-save --package-lock=false
+          "express@${{ matrix.express-version }}"
+          "@types/express@${{ matrix.types-version }}"
+
+      - name: Verify selected versions
+        env:
+          EXPECTED_EXPRESS_VERSION: ${{ matrix.express-version }}
+          EXPECTED_TYPES_VERSION: ${{ matrix.types-version }}
+        run: >-
+          node -e "const expressVersion = require('express/package.json').version;
+          const typesVersion = require('@types/express/package.json').version;
+          if (expressVersion !== process.env.EXPECTED_EXPRESS_VERSION ||
+          typesVersion !== process.env.EXPECTED_TYPES_VERSION)
+          throw new Error('selected Express compatibility versions do not match the matrix');"
+
+      - name: Run complete compatibility suite
+        run: npm test
+
   package-consumer:
     name: packed consumer
     runs-on: ubuntu-latest
