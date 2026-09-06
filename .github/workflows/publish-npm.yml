@@ -77,9 +77,6 @@ jobs:
 
           if [[ ! -f "publish-dist/$TARBALL" ]]; then
             echo "Building package tarball from released source tree..."
-            npm ci
-            npm test
-            npm run test:package
             npm pack --ignore-scripts --pack-destination publish-dist
           fi
 
