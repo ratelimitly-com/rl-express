@@ -65,7 +65,7 @@ workflow for the initial artifact.
 Immediately after 1.0.0 exists:
 
 1. configure the npm trusted publisher for GitHub organization
-   `ratelimitly-com`, repository `rl-express`, and workflow file `release.yml`;
+   `ratelimitly-com`, repository `rl-express`, and workflow file `publish-npm.yml`;
 2. allow `npm publish` for that publisher;
 3. delete the GitHub `NPM_TOKEN` secret;
 4. revoke the granular bootstrap token on npm; and
@@ -78,8 +78,16 @@ can also be configured from the command line:
 ```sh
 npm trust github ratelimitly-express \
   --repo ratelimitly-com/rl-express \
-  --file release.yml \
+  --file publish-npm.yml \
   --allow-publish
+```
+
+Releases can then be published using the manual dispatch workflow:
+
+```sh
+gh workflow run publish-npm.yml \
+  --repo ratelimitly-com/rl-express \
+  -f version=1.0.0
 ```
 
 Do not retain a bootstrap token as a fallback. With no `NPM_TOKEN` secret, npm

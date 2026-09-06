@@ -1,0 +1,111 @@
+name: publish-npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release version to publish, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-npm-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish verified release to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Require the default branch and a numeric version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "npm publishing must be dispatched from main" >&2
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version must be numeric MAJOR.MINOR.PATCH without a v prefix" >&2
+            exit 1
+          fi
+
+      - name: Check out the released tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install latest npm with OIDC Trusted Publishing support
+        run: npm install -g npm@latest
+
+      - name: Obtain and verify release tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p 'require("./package.json").name')"
+          SLUG="$(printf '%s' "$PACKAGE_NAME" | sed 's|^@||; s|/|-|g')"
+          TARBALL="${SLUG}-${VERSION}.tgz"
+          mkdir -p publish-dist
+
+          tag="v$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Checking GitHub release $tag for distribution assets..."
+            mkdir -p dist
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir dist || true
+            if [[ -f "dist/$TARBALL" ]]; then
+              if [[ -f "dist/SHA256SUMS" ]]; then
+                (cd dist && sha256sum -c --ignore-missing SHA256SUMS)
+              fi
+              cp "dist/$TARBALL" "publish-dist/$TARBALL"
+              echo "Verified and staged GitHub release asset $TARBALL"
+            fi
+          fi
+
+          if [[ ! -f "publish-dist/$TARBALL" ]]; then
+            echo "Building package tarball from released source tree..."
+            npm ci
+            npm test
+            npm run test:package
+            npm pack --pack-destination publish-dist
+          fi
+
+          if [[ ! -f "publish-dist/$TARBALL" ]]; then
+            echo "Failed to produce publish-dist/$TARBALL" >&2
+            exit 1
+          fi
+
+          # Verify tarball structure
+          tar -tzf "publish-dist/$TARBALL" | grep -Fx "package/package.json" >/dev/null
+          tar -tzf "publish-dist/$TARBALL" | grep -Fx "package/index.js" >/dev/null
+          echo "Tarball publish-dist/$TARBALL is valid and ready for publishing."
+
+      - name: Publish package to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NODE_AUTH_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p 'require("./package.json").name')"
+          SLUG="$(printf '%s' "$PACKAGE_NAME" | sed 's|^@||; s|/|-|g')"
+          TARBALL="${SLUG}-${VERSION}.tgz"
+          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "Publishing to npm using authentication token..."
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+            npm publish "./publish-dist/$TARBALL" --access public
+          else
+            echo "Publishing to npm using OIDC Trusted Publishing with provenance..."
+            npm publish "./publish-dist/$TARBALL" --access public --provenance
+          fi

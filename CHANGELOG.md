@@ -5,6 +5,11 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add manual `publish-npm` workflow for publishing verified releases with OIDC
+  Trusted Publishing and provenance.
+
 ### Changed
 
 - Update `ratelimitly-client` dependency to 2.0.2.
