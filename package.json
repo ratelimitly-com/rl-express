@@ -1,6 +1,6 @@
 {
   "name": "ratelimitly-express",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Express middleware for RateLimitly centralized rate limiting, latency guards, and load shedding",
   "main": "index.js",
   "types": "index.d.ts",

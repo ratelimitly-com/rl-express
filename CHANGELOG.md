@@ -5,6 +5,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-06
+
 ### Added
 
 - Add manual `publish-npm` workflow for publishing verified releases with OIDC
@@ -40,5 +42,6 @@ The project follows [Semantic Versioning](https://semver.org/).
   reports; implicit route-derived tracker identities are rejected.
 - Keep approximate conventional HTTP rate-limit headers disabled by default.
 
-[Unreleased]: https://github.com/ratelimitly-com/rl-express/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ratelimitly-com/rl-express/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/ratelimitly-com/rl-express/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ratelimitly-com/rl-express/releases/tag/v1.0.0
