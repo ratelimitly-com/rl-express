@@ -39,10 +39,15 @@ try {
 
   const packResult = run(
     npmCommand,
-    ['pack', '--json', '--pack-destination', tempRoot],
+    ['pack', '--ignore-scripts', '--json', '--pack-destination', tempRoot],
     { cwd: projectRoot }
   );
-  const packMetadata = JSON.parse(packResult.stdout)[0];
+  const jsonStart = packResult.stdout.indexOf('[');
+  const jsonEnd = packResult.stdout.lastIndexOf(']') + 1;
+  const jsonText = jsonStart !== -1 && jsonEnd > jsonStart
+    ? packResult.stdout.slice(jsonStart, jsonEnd)
+    : packResult.stdout;
+  const packMetadata = JSON.parse(jsonText)[0];
   const tarball = path.join(tempRoot, packMetadata.filename);
 
   assert.equal(packMetadata.files.some(file => file.path.startsWith('test/')), false);

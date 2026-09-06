@@ -80,7 +80,7 @@ jobs:
             npm ci
             npm test
             npm run test:package
-            npm pack --pack-destination publish-dist
+            npm pack --ignore-scripts --pack-destination publish-dist
           fi
 
           if [[ ! -f "publish-dist/$TARBALL" ]]; then
