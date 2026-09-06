@@ -5,6 +5,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Update `ratelimitly-client` dependency to 2.0.2.
+
 ## [1.0.0] - 2026-09-01
 
 ### Added
